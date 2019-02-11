@@ -1,0 +1,61 @@
+{
+  "name": "zkredmineapi",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "author": {
+    "name": "Vadim Usinov",
+    "email": "wazzroboy@gmail.com"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "koa": "^2.7.0",
+    "koa-body": "^4.0.7",
+    "koa-logger": "^3.2.0",
+    "koa-router": "^7.4.0",
+    "mariadb": "^2.0.3",
+    "request": "^2.88.0",
+    "request-promise-native": "^1.0.5"
+  },
+  "devDependencies": {
+    "@types/koa": "^2.0.48",
+    "@types/koa-logger": "^3.1.1",
+    "@types/koa-router": "^7.0.39",
+    "@types/node": "^10.12.21",
+    "@types/request-promise-native": "^1.0.15",
+    "tslint-config-airbnb": "^5.11.1",
+    "tslint-config-prettier": "^1.18.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc",
+    "start": "tsc && node dist/index.js",
+    "lint": "tslint ./src/*.ts"
+  },
+  "prettier": {
+    "printWidth": 100,
+    "singleQuote": true,
+    "trailingComma": "all",
+    "arrowParens": "avoid"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "lint-staged": {
+    "*.ts": [
+      "prettier --write",
+      "tslint --fix",
+      "git add"
+    ]
+  },
+  "nodemonConfig": {
+    "verbose": true,
+    "watch": [
+      "dist"
+    ],
+    "ext": "js",
+    "legacyWatch": true
+  }
+}

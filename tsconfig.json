@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "es6", //компилируем в es6, можно использовать es5 для старых версий нода
+    "module": "commonjs", //импорт модулей преобразуется в commonjs (node require)
+    "moduleResolution": "node",
+    "sourceMap": true, //генерировать sourceMaps, нужно для отладки
+    "typeRoots": [
+        "./node_modules/@types/"
+      ],
+    "lib": [ "es2015" ],
+    "outDir": "dist",
+  },
+  //указывает что включаться должны только файлы из папки /src
+  "compileOnSave": false,
+  "include": [
+    "src/*"
+  ],
+  "exclude": [
+    "node_modules/*",
+    "**/*-aot.ts"
+  ]
+}
