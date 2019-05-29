@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es6", //компилируем в es6, можно использовать es5 для старых версий нода
+    "target": "es2017", //компилируем в es6, можно использовать es5 для старых версий нода
     "module": "commonjs", //импорт модулей преобразуется в commonjs (node require)
     "moduleResolution": "node",
     "sourceMap": true, //генерировать sourceMaps, нужно для отладки
