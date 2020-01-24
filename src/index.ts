@@ -8,11 +8,22 @@ import * as maria from 'mariadb';
 import { AddressInfo } from 'net';
 import { Configuration } from './Configuration';
 
+function createDate(year: number, month: number, day: number): Date {
+  return new Date(year, month - 1, day, 4, 0);
+}
+
+function dateOut(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+function date(year: number, month: number, day: number): string {
+  return dateOut(createDate(year, month, day));
+}
 
 async function main() {
   const app = new Koa();
   const router = new Router();
-  const config = new Configuration();
+  const config = new Configuration('127.0.0.1', 'root', 'bitnami_redmineplusagile', 3030, 'I7KVo7Q9v5Vg');
   console.log(config)
   let pool;
   if (config.getDbPassword()) {
@@ -83,13 +94,22 @@ async function main() {
             CREATE INDEX index_value_ids ON custom_values(custom_field_id, customized_id,value(1));
             Без него запрос может выполняться более 5 секунд
         */
+    // console.log(body);
+    const CANCEL_STATUS = 6;
+    const DOUBLE_STATUS = 18;
+
     if (body.month) {
       query =
+        // 'SELECT SUM(time_entries.hours) as hours FROM time_entries WHERE issue_id IN ' +
+        // `(SELECT id FROM issues as i WHERE project_id = (SELECT id FROM projects WHERE identifier = '${body.project}') AND tracker_id = 7 ` +
+        // 'AND (EXISTS (SELECT value FROM custom_values WHERE i.id = customized_id ' +
+        // `AND (value = '4' OR value = '5') AND custom_field_id = 7) ` +
+        // 'OR  (SELECT value FROM custom_values WHERE i.id = customized_id AND custom_field_id = 45) = 1)) ' +
+        // `AND spent_on BETWEEN STR_TO_DATE('${body.month}','%Y-%m-%d') AND CURDATE() ` +
+        // 'AND (activity_id = 33 OR activity_id = 37);'
+
         'SELECT SUM(time_entries.hours) as hours FROM time_entries WHERE issue_id IN ' +
-        `(SELECT id FROM issues as i WHERE project_id = (SELECT id FROM projects WHERE identifier = '${body.project}') AND tracker_id = 7 ` +
-        'AND (EXISTS (SELECT value FROM custom_values WHERE i.id = customized_id ' +
-        `AND (value = '4' OR value = '5') AND custom_field_id = 7) ` +
-        'OR  (SELECT value FROM custom_values WHERE i.id = customized_id AND custom_field_id = 45) = 1)) ' +
+        `(SELECT id FROM issues as i WHERE project_id = (SELECT id FROM projects WHERE identifier = '${body.project}') AND tracker_id = 7 AND NOT (status_id = 6 OR status_id = 18)) ` +
         `AND spent_on BETWEEN STR_TO_DATE('${body.month}','%Y-%m-%d') AND CURDATE() ` +
         'AND (activity_id = 33 OR activity_id = 37);'
     }
@@ -106,7 +126,7 @@ async function main() {
   });
 
   router.post('/1c', async (ctx) => {
-    const { project, month } = ctx.request.body;
+    const body = ctx.request.body;
     /*
       SELECT SUM(time_entries.hours) as hours FROM time_entries
                     WHERE issue_id IN
@@ -127,19 +147,25 @@ async function main() {
                     BETWEEN STR_TO_DATE('2019-10-01','%Y-%m-%d') AND CURDATE() 
                     AND activity_id = 40;
     */
+   console.log(body);
     const query = 
-    'SELECT SUM(time_entries.hours) as hours FROM time_entries ' +
-        'WHERE issue_id IN ' +
-    '(SELECT id FROM issues as i ' +
-        'WHERE project_id = ' +
-        `(SELECT id FROM projects WHERE identifier = '${project}') ` +
-        'AND tracker_id = 7 ' +
-        'AND status_id = 5 ' +
-        'AND (EXISTS (SELECT value FROM custom_values WHERE i.id = customized_id ' +
-          `AND (value = '4' OR value = '5') AND custom_field_id = 7) ` +
-        'OR (SELECT value FROM custom_values WHERE i.id = customized_id AND custom_field_id = 45) = 1)) ' +
-        `AND spent_on BETWEEN STR_TO_DATE('${month}','%Y-%m-%d') AND CURDATE() ` +
-        'AND activity_id = 40; '
+    // 'SELECT SUM(time_entries.hours) as hours FROM time_entries ' +
+    //     'WHERE issue_id IN ' +
+    // '(SELECT id FROM issues as i ' +
+    //     'WHERE project_id = ' +
+    //     `(SELECT id FROM projects WHERE identifier = '${body.project}') ` +
+    //     'AND tracker_id = 7 ' +
+    //     'AND status_id = 5 ' +
+    //     'AND (EXISTS (SELECT value FROM custom_values WHERE i.id = customized_id ' +
+    //       `AND (value = '4' OR value = '5') AND custom_field_id = 7) ` +
+    //     'OR (SELECT value FROM custom_values WHERE i.id = customized_id AND custom_field_id = 45) = 1)) ' +
+    //     `AND spent_on BETWEEN STR_TO_DATE('${body.month}','%Y-%m-%d') AND CURDATE() ` +
+    //     'AND activity_id = 40; '
+
+    'SELECT SUM(time_entries.hours) as hours FROM time_entries WHERE issue_id IN ' +
+    `(SELECT id FROM issues as i WHERE project_id = (SELECT id FROM projects WHERE identifier = '${body.project}') AND tracker_id = 7 AND NOT (status_id = 6 OR status_id = 18)) ` +
+    `AND spent_on BETWEEN STR_TO_DATE('${body.month}','%Y-%m-%d') AND CURDATE() ` +
+    'AND activity_id = 40;'
     const result = await execQuery(query);
     if (result)
       ctx.body = result;
@@ -351,6 +377,176 @@ async function main() {
     const result = await execQuery(query);
     if (result)
       ctx.body = result;
+    else
+      ctx.status = 500;
+  });
+
+  router.get('/labourByDay', async (ctx) => {
+    const { project, month, year } = ctx.query;
+    const firstMonthDay = date(year, month, 1);
+    const lastMonthDay = date(year, +month + 1, 0);
+
+    const query = 'SELECT spent_on as date, issue_id as issue, SUM(time_entries.hours) as hours FROM time_entries WHERE issue_id IN ' +
+    `(SELECT id FROM issues as i WHERE project_id = (SELECT id FROM projects WHERE identifier = '${project}') AND tracker_id = 7 AND NOT (status_id = 6 OR status_id = 18)) ` +
+    `AND spent_on BETWEEN STR_TO_DATE('${firstMonthDay}','%Y-%m-%d') AND STR_TO_DATE('${lastMonthDay}','%Y-%m-%d') ` +
+    'AND (activity_id = 33 OR activity_id = 37) GROUP BY spent_on, issue_id;'
+
+
+    const result = await execQuery(query);
+    if (result) {
+      const data = [];
+      result.forEach(res => {
+        if (!data[res.date.getDate()]) 
+          data[res.date.getDate()] = { hours: 0, issues: [] };
+        
+        const curDate = data[res.date.getDate()];
+        curDate.hours += res.hours;
+        curDate.issues.push(res.issue);
+      })
+      ctx.body = data;
+    }
+    else
+      ctx.status = 500;
+  });
+
+  router.get('/labour1cByDay', async (ctx) => {
+    const { project, month, year } = ctx.query;
+    const firstMonthDay = date(year, month, 1);
+    const lastMonthDay = date(year, +month + 1, 0);
+
+    const query = 'SELECT spent_on as date, issue_id as issue, SUM(time_entries.hours) as hours FROM time_entries WHERE issue_id IN ' +
+    `(SELECT id FROM issues as i WHERE project_id = (SELECT id FROM projects WHERE identifier = '${project}') AND tracker_id = 7 AND NOT (status_id = 6 OR status_id = 18)) ` +
+    `AND spent_on BETWEEN STR_TO_DATE('${firstMonthDay}','%Y-%m-%d') AND STR_TO_DATE('${lastMonthDay}','%Y-%m-%d') ` +
+    'AND activity_id = 40 GROUP BY spent_on, issue_id;'
+
+    const result = await execQuery(query);
+    if (result) {
+      const data = [];
+      result.forEach(res => {
+        if (!data[res.date.getDate()]) 
+          data[res.date.getDate()] = { hours: 0, issues: [] };
+        
+        const curDate = data[res.date.getDate()];
+        curDate.hours += res.hours;
+        curDate.issues.push(res.issue);
+      })
+      ctx.body = data;
+    }
+    else
+      ctx.status = 500;
+  });
+
+  router.get('/labourByUser', async (ctx) => {
+    const { project, month, year } = ctx.query;
+    const firstMonthDay = date(year, month, 1);
+    const lastMonthDay = date(year, +month + 1, 0);
+
+    const query = 'SELECT users.login as user, SUM(time_entries.hours) as hours FROM time_entries INNER JOIN users ON users.id = user_id WHERE issue_id IN ' +
+    `(SELECT id FROM issues as i WHERE project_id = (SELECT id FROM projects WHERE identifier = '${project}') AND tracker_id = 7 AND NOT (status_id = 6 OR status_id = 18)) ` +
+    `AND spent_on BETWEEN STR_TO_DATE('${firstMonthDay}','%Y-%m-%d') AND STR_TO_DATE('${lastMonthDay}','%Y-%m-%d') ` +
+    'AND (activity_id = 33 OR activity_id = 37) GROUP BY user_id;'
+
+    const result = await execQuery(query);
+    if (result)
+      ctx.body = result;
+    else
+      ctx.status = 500;
+  });
+
+  router.get('/labour1cByUser', async (ctx) => {
+    const { project, month, year } = ctx.query;
+    const firstMonthDay = date(year, month, 1);
+    const lastMonthDay = date(year, +month + 1, 0);
+
+    const query = 'SELECT users.login as user, SUM(time_entries.hours) as hours FROM time_entries INNER JOIN users ON users.id = user_id WHERE issue_id IN ' +
+    `(SELECT id FROM issues as i WHERE project_id = (SELECT id FROM projects WHERE identifier = '${project}') AND tracker_id = 7 AND NOT (status_id = 6 OR status_id = 18)) ` +
+    `AND spent_on BETWEEN STR_TO_DATE('${firstMonthDay}','%Y-%m-%d') AND STR_TO_DATE('${lastMonthDay}','%Y-%m-%d') ` +
+    'AND activity_id = 40 GROUP BY user_id;'
+
+    const result = await execQuery(query);
+    if (result)
+      ctx.body = result;
+    else
+      ctx.status = 500;
+  });
+
+  router.get('/oldlabourByDayUser', async (ctx) => {
+    const { project, month, year } = ctx.query;
+    const firstMonthDay = date(year, month, 1);
+    const lastMonthDay = date(year, +month + 1, 0);
+
+    const query = 'SELECT spent_on as date, users.login AS user, SUM(time_entries.hours) as hours FROM time_entries INNER JOIN users ON users.id = user_id WHERE ' +
+    `spent_on BETWEEN STR_TO_DATE('${firstMonthDay}','%Y-%m-%d') AND STR_TO_DATE('${lastMonthDay}','%Y-%m-%d') ` +
+    'GROUP BY spent_on, login;'
+
+    let result: any[] = await execQuery(query);
+    const users = new Set<string>();
+    if (result) {
+      const labours: {
+        user: string,
+        labours: { date: string, hours: number }[],
+      }[] = [];
+      result.forEach((value) => {
+        if (users.has(value.user)) return;
+        else {
+          users.add(value.user);
+          const data = { user: value.user, labours: [] };
+          const userLabours = result.filter(r => r.user === value.user);
+          userLabours.forEach(l => {
+            data.labours.push({
+              date: l.date,
+              hours: l.hours,
+            });
+          });
+
+          labours.push(data);
+        }
+      })
+
+      ctx.body = labours;
+    }
+    else
+      ctx.status = 500;
+  });
+
+  router.get('/labourByDayUser', async (ctx) => {
+    const { project, month, year } = ctx.query;
+    const firstMonthDay = date(year, month, 1);
+    const lastMonthDay = date(year, +month + 1, 0);
+
+    const query = 'SELECT spent_on as date, users.login AS user, issue_id as issue, SUM(time_entries.hours) as hours FROM time_entries INNER JOIN users ON users.id = user_id WHERE ' +
+    `spent_on BETWEEN STR_TO_DATE('${firstMonthDay}','%Y-%m-%d') AND STR_TO_DATE('${lastMonthDay}','%Y-%m-%d') ` +
+    'GROUP BY spent_on, login, issue_id;'
+
+    let result: any[] = await execQuery(query);
+    const users = new Set<string>();
+    if (result) {
+      const labours: {
+        user: string,
+        labours: any,
+      }[] = [];
+      result.forEach((value) => {
+        if (users.has(value.user)) return;
+        else {
+          users.add(value.user);
+          const data = { user: value.user, labours: {} };
+          const userLabours = result.filter(r => r.user === value.user);
+
+          userLabours.forEach(labour => {
+            if (!data.labours[labour.date.getDate()]) 
+              data.labours[labour.date.getDate()] = { hours: 0, issues: [] };
+
+            const currentDateLabour = data.labours[labour.date.getDate()];
+            currentDateLabour.hours += labour.hours;
+            currentDateLabour.issues.push(labour.issue);
+          });
+
+          labours.push(data);
+        }
+      })
+
+      ctx.body = labours;
+    }
     else
       ctx.status = 500;
   });
